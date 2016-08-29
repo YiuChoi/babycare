@@ -1,3 +1,6 @@
+
+## API
+
 ### 注册
 ```
 curl -H "Content-Type: application/json" -X POST -d '{"username":"xyz","password":"xyz"}' http://localhost:5000/api/v1/register
@@ -6,22 +9,19 @@ curl -H "Content-Type: application/json" -X POST -d '{"username":"xyz","password
 
 ### 登录
 ```
-  curl -u xyz:xyz http://127.0.0.1:5000/api/v1/login -X POST
+  curl  -H "Content-Type: application/json" http://127.0.0.1:5000/auth -X POST  -d '{"username":"xyz","password":"xyz"}'
   {
-  "duration": 600,
-  "msg": "\u767b\u5f55\u6210\u529f",
-  "status": true,
   "token": "eyJpYXQiOjE0NzI0NTkwNDIsImV4cCI6MTQ3MjQ1OTY0MiwiYWxnIjoiSFMyNTYifQ.eyJpZCI6MX0.LLE5eVOsARkosrSyXeusMOtpL4z2OnKU_hcpSGgIGmw"
  }
  
- request.setHeader("Authorization", "Basic "+Base64.encodeBytes("login:password".getBytes()));
+ request.setHeader("Authorization", "JWT "+Base64.encodeBytes("login:password".getBytes()));
 ```
 
 ### 认证
 ```
- curl -u eyJhbGciOiJIUzI1NiIsImV4cCI6MTM4NTY2OTY1NSwiaWF0IjoxMzg1NjY5MDU1fQ.eyJpZCI6MX0.XbOEFJkhjHJ5uRINh2JA1BPzXjSohKYDRT472wGOvjc:unused -i -X GET http://127.0.0.1:5000/api/resource
+ curl -H "Content-Type: application/json" -H "Authorization:JWT eyJpYXQiOjE0NzI0NTkwNDIsImV4cCI6MTQ3MjQ1OTY0MiwiYWxnIjoiSFMyNTYifQ.eyJpZCI6MX0.LLE5eVOsARkosrSyXeusMOtpL4z2OnKU_hcpSGgIGmw" -X POST http://127.0.0.1:5000/api/v1/get_info
  
-  request.setHeader("Authorization", "Basic "+Base64.encodeBytes("login:password".getBytes()));
+  request.setHeader("Authorization", "JWT "+Base64.encodeBytes("login:password".getBytes()));
 ```
 
 
