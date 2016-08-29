@@ -5,9 +5,9 @@ from flask_restful import Resource, Api
 from flask_httpauth import HTTPBasicAuth
 from passlib.apps import custom_app_context as pwd_context
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer, SignatureExpired, BadSignature
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Float
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'LLCllc,./'
@@ -21,15 +21,42 @@ session = Session()
 auth = HTTPBasicAuth()
 
 
-class User(Base):
-    __tablename__ = "user"
-    id = Column(Integer, primary_key=True)
-    username = Column(String, index=True)
-    password_hash = Column(String)
+class Baby(Base):
+    __tablename__ = "babys"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    baby_uuid = Column(String, nullable=False, primary_key=True)
+    lac = Column(Float)
+    lng = Column(Float)
+    address = Column(String)
+    last_time = Column(DateTime)
+
+
+class UserBaby(Base):
+    __tablename__ = "user_baby"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
     is_admin = Column(Integer)
-    baby_id = Column(String)
+    username = Column(Integer, ForeignKey("users.username"))
+    baby_uuid = Column(Integer, ForeignKey("babys.uuid"))
+    user_relation = Column(String, nullable=False)
+
+    user = relationship("User", back_populates="user_baby")
+    baby = relationship("Baby", back_populates="user_baby")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String, primary_key=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    nickname = Column(String)
     register_time = Column(DateTime)
     last_login_time = Column(DateTime)
+
+    def __repr__(self):
+        return "<User(name='%s', nickname='%s', password='%s')>" % (self.name, self.nickname, self.password_hash)
 
     def hash_password(self, password):
         self.password_hash = pwd_context.encrypt(password)
@@ -56,11 +83,8 @@ class User(Base):
 
 @auth.verify_password
 def verify_password(username_or_token, password):
-    # first try to authenticate by token
-    print(username_or_token + ":" + password)
     user = User.verify_auth_token(username_or_token)
     if not user:
-        # try to authenticate with username/password
         user = session.query(User).filter_by(username=username_or_token).first()
         if not user or not user.verify_password(password):
             return False
@@ -76,12 +100,14 @@ class Register(Resource):
     def post():
         username = request.json.get('username')
         password = request.json.get('password')
+        nickname = request.json.get('nickname')
         if username is None or password is None:
             return jsonify({'status': False, "msg": "用户名或密码不能为空"})
         if session.query(User).filter_by(username=username).first() is not None:
             return jsonify({'status': False, "msg": "用户名已存在"})
         user = User(username=username)
         user.hash_password(password)
+        user.nickname = nickname
         user.register_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
         session.add(user)
         session.commit()
@@ -100,32 +126,36 @@ class BindBabyId(Resource):
     @staticmethod
     @auth.login_required
     def post():
-        baby_id = request.json.get('baby_id')
-        user = session.query(User).filter_by(baby_id=baby_id).first()
-        if user:
+        baby_uuid = request.json.get('baby_uuid')
+        userbaby = session.query(UserBaby).filter_by(baby_uuid=baby_uuid).first()
+        if userbaby.is_admin:
             return jsonify({'status': False, "msg": "此id已被绑定,请联系管理员添加"})
-        user = g.user
-        user.baby_id = baby_id
-        user.is_admin = 1
-        session.add(user)
+        userbaby = g.user
+        userbaby.baby_uuid = baby_uuid
+        userbaby.is_admin = 1
+        session.add(userbaby)
         session.commit()
         return jsonify({'status': True, "msg": "绑定成功"})
 
 
-class RequestBindBabyId(Resource):
+class AddBindBabyId(Resource):
     @staticmethod
     @auth.login_required
     def post():
-        baby_id = request.json.get('baby_id')
+        baby_uuid = request.json.get('baby_uuid')
         add_username = request.json.get('add_username')
+        user_relation = request.json.get('user_relation')
         user = session.query(User).filter_by(username=add_username).first()
+        userbaby = session.query(UserBaby).filter_by(username=add_username).first()
         if not user:
             return jsonify({'status': False, "msg": "用户不存在"})
-        if g.user.is_admin is 0:
+        if userbaby.is_admin is 0:
             return jsonify({'status': False, "msg": "不是管理员无法添加"})
-        user.baby_id = baby_id
-        user.is_admin = 0
-        session.add(user)
+        userbaby.baby_uuid = baby_uuid
+        userbaby.username = user.username
+        userbaby.user_relation = user_relation
+        userbaby.is_admin = 0
+        session.add(userbaby)
         session.commit()
         return jsonify({'status': True, "msg": "添加成功"})
 
@@ -144,13 +174,45 @@ class UploadLocation(Resource):
     def post():
         lac = request.json.get('lac')
         lng = request.json.get('lng')
+        address = request.json.get('address')
+        baby_uuid = request.json('baby_uuid')
+        baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
+        user = session.query(UserBaby).filter_by(username=g.user.username).first()
+        if user.baby_uuid is not baby.baby_uuid:
+            return jsonify({'status': False, "msg": "绑定后才能上传哦"})
+        if not baby:
+            baby = Baby()
+        baby.address = address
+        baby.lac = lac
+        baby.lng = lng
+        baby.baby_uuid = baby_uuid
+        baby.last_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+        session.add(baby)
+        session.commit()
+        return jsonify({'status': True, "msg": "s上传成功"})
+
+
+class GetLocation(Resource):
+    @staticmethod
+    @auth.login_required
+    def post():
+        baby_uuid = request.json('baby_uuid')
+        baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
+        user = session.query(UserBaby).filter_by(username=g.user.username).first()
+        if user.baby_uuid is not baby.baby_uuid:
+            return jsonify({'status': False, "msg": "绑定后才能读取位置哦"})
+        return jsonify({'status': True, "msg": "获取成功",
+                        'data': {'lac': baby.lac, 'lng': baby.lng, 'address': baby.address,
+                                 'last_time': baby.last_time}})
 
 
 api.add_resource(Register, '/api/v1/register')
 api.add_resource(Login, '/api/v1/login')
 api.add_resource(BindBabyId, '/api/v1/bind')
-api.add_resource(RequestBindBabyId, '/api/v1/request_bind')
+api.add_resource(AddBindBabyId, '/api/v1/add_bind')
 api.add_resource(GetInfo, '/api/v1/get_info')
+api.add_resource(UploadLocation, '/api/v1/upload_location')
+api.add_resource(GetLocation, '/api/v1/get_location')
 
 if __name__ == '__main__':
     app.run(debug=True)
