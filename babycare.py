@@ -5,6 +5,7 @@ from flask_restful import Resource, Api
 from flask_httpauth import HTTPBasicAuth
 from passlib.apps import custom_app_context as pwd_context
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer, SignatureExpired, BadSignature
+from sqlalchemy import Table
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -32,17 +33,13 @@ class Baby(Base):
     last_time = Column(DateTime)
 
 
-class UserBaby(Base):
-    __tablename__ = "user_baby"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    is_admin = Column(Integer)
-    username = Column(Integer, ForeignKey("users.username"))
-    baby_uuid = Column(Integer, ForeignKey("babys.uuid"))
-    user_relation = Column(String, nullable=False)
-
-    user = relationship("User", back_populates="user_baby")
-    baby = relationship("Baby", back_populates="user_baby")
+user_baby_table = Table('user_baby', Base.metadata,
+                        id=Column(Integer, primary_key=True, autoincrement=True),
+                        is_admin=Column(Integer),
+                        username=Column(Integer, ForeignKey("users.username")),
+                        baby_uuid=Column(Integer, ForeignKey("babys.uuid")),
+                        user_relation=Column(String, nullable=False)
+                        )
 
 
 class User(Base):
