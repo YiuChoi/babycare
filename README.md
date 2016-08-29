@@ -1,3 +1,9 @@
+### 注册
+```
+curl -H "Content-Type: application/json" -X POST -d '{"username":"xyz","password":"xyz"}' http://localhost:5000/api/v1/register
+
+```
+
 ### 登录
 ```
   curl -u xyz:xyz http://127.0.0.1:5000/api/v1/login -X POST

@@ -14,7 +14,7 @@ app.config['SECRET_KEY'] = 'LLCllc,./'
 api = Api(app)
 
 Base = declarative_base()
-engine = create_engine("mysql+pymysql://root:@localhost:3306/llc", echo=True)
+engine = create_engine("mysql+pymysql://root:@localhost:3306/llc")
 Session = sessionmaker(bind=engine)
 session = Session()
 
@@ -25,30 +25,30 @@ class Baby(Base):
     __tablename__ = "babys"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    baby_uuid = Column(String, nullable=False, unique=True)
+    baby_uuid = Column(String(255), nullable=False, unique=True,primary_key=True)
     lac = Column(Float)
     lng = Column(Float)
-    address = Column(String)
+    address = Column(String(255))
     last_time = Column(DateTime)
 
 
 class UserBaby(Base):
     __tablename__ = "user_babys"
 
-    id = Column(Integer, autoincrement=True, primary_key=True),
-    is_admin = Column(Integer),
-    username = Column(String, nullable=False),
-    baby_uuid = Column(String, nullable=False),
-    relationship = Column(String, nullable=False)
+    id = Column(Integer, autoincrement=True, primary_key=True)
+    is_admin = Column(Integer)
+    username = Column(String(255), nullable=False)
+    baby_uuid = Column(String(255), nullable=False)
+    relationship = Column(String(255), nullable=False)
 
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String, unique=True, nullable=False)
-    password_hash = Column(String, nullable=False)
-    nickname = Column(String)
+    username = Column(String(255), unique=True, nullable=False,primary_key=True)
+    password_hash = Column(String(255), nullable=False)
+    nickname = Column(String(255))
     register_time = Column(DateTime)
     last_login_time = Column(DateTime)
 
@@ -76,6 +76,8 @@ class User(Base):
             return None  # invalid token
         user = session.query(User).get(data['id'])
         return user
+
+Base.metadata.create_all(engine)
 
 
 @auth.verify_password
