@@ -1,14 +1,13 @@
 # coding: utf-8
 import time
 from flask import Flask, request, jsonify, g
-from flask_restful import Resource, Api
 from flask_httpauth import HTTPBasicAuth
-from passlib.apps import custom_app_context as pwd_context
+from flask_restful import Resource, Api
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer, SignatureExpired, BadSignature
-from sqlalchemy import Table
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Float
+from passlib.apps import custom_app_context as pwd_context
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'LLCllc,./'
@@ -26,27 +25,28 @@ class Baby(Base):
     __tablename__ = "babys"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    baby_uuid = Column(String, nullable=False, primary_key=True)
+    baby_uuid = Column(String, nullable=False, unique=True)
     lac = Column(Float)
     lng = Column(Float)
     address = Column(String)
     last_time = Column(DateTime)
 
 
-user_baby_table = Table('user_baby', Base.metadata,
-                        id=Column(Integer, primary_key=True, autoincrement=True),
-                        is_admin=Column(Integer),
-                        username=Column(Integer, ForeignKey("users.username")),
-                        baby_uuid=Column(Integer, ForeignKey("babys.uuid")),
-                        user_relation=Column(String, nullable=False)
-                        )
+class UserBaby(Base):
+    __tablename__ = "user_babys"
+
+    id = Column(Integer, autoincrement=True, primary_key=True),
+    is_admin = Column(Integer),
+    username = Column(String, nullable=False),
+    baby_uuid = Column(String, nullable=False),
+    relationship = Column(String, nullable=False)
 
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String, primary_key=True, nullable=False)
+    username = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
     nickname = Column(String)
     register_time = Column(DateTime)
