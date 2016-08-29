@@ -10,7 +10,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'LLCllc,./'
+app.config['SECRET_KEY'] = 'TwYV2R2IEU5&Ne6JSr@Jx9HjOuy7QVG%'
 app.config['BCRYPT_LEVEL'] = 14
 api = Api(app)
 
