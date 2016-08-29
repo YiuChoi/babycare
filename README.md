@@ -13,6 +13,8 @@ curl -H "Content-Type: application/json" -X POST -d '{"username":"xyz","password
   "status": true,
   "token": "eyJpYXQiOjE0NzI0NTkwNDIsImV4cCI6MTQ3MjQ1OTY0MiwiYWxnIjoiSFMyNTYifQ.eyJpZCI6MX0.LLE5eVOsARkosrSyXeusMOtpL4z2OnKU_hcpSGgIGmw"
  }
+ 
+ request.setHeader("Authorization", "Basic "+Base64.encodeBytes("login:password".getBytes()));
 ```
 
 ### 认证
