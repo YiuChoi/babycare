@@ -1,31 +1,32 @@
 # coding: utf-8
 import time
 from flask import Flask, request, jsonify, g
-from flask_httpauth import HTTPBasicAuth
+from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api
+from flask_bcrypt import Bcrypt
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer, SignatureExpired, BadSignature
-from passlib.apps import custom_app_context as pwd_context
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'LLCllc,./'
+app.config['BCRYPT_LEVEL'] = 14
 api = Api(app)
+
+bcrypt = Bcrypt(app)
 
 Base = declarative_base()
 engine = create_engine("mysql+pymysql://root:@localhost:3306/llc")
 Session = sessionmaker(bind=engine)
 session = Session()
 
-auth = HTTPBasicAuth()
-
 
 class Baby(Base):
     __tablename__ = "babys"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    baby_uuid = Column(String(255), nullable=False, unique=True,primary_key=True)
+    baby_uuid = Column(String(255), nullable=False, unique=True, primary_key=True)
     lac = Column(Float)
     lng = Column(Float)
     address = Column(String(255))
@@ -46,20 +47,17 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String(255), unique=True, nullable=False,primary_key=True)
+    username = Column(String(255), unique=True, nullable=False, primary_key=True)
     password_hash = Column(String(255), nullable=False)
     nickname = Column(String(255))
     register_time = Column(DateTime)
     last_login_time = Column(DateTime)
 
-    def __repr__(self):
-        return "<User(name='%s', nickname='%s', password='%s')>" % (self.name, self.nickname, self.password_hash)
-
     def hash_password(self, password):
-        self.password_hash = pwd_context.encrypt(password)
+        self.password_hash = bcrypt.generate_password_hash(password)
 
     def verify_password(self, password):
-        return pwd_context.verify(password, self.password_hash)
+        return bcrypt.check_password_hash(self.password_hash, password)
 
     def generate_auth_token(self, expiration=600):
         s = Serializer(app.config['SECRET_KEY'], expires_in=expiration)
@@ -77,21 +75,29 @@ class User(Base):
         user = session.query(User).get(data['id'])
         return user
 
+
 Base.metadata.create_all(engine)
 
 
-@auth.verify_password
-def verify_password(username_or_token, password):
-    user = User.verify_auth_token(username_or_token)
+def authenticate(username, password):
+    user = User.verify_auth_token(username)
     if not user:
-        user = session.query(User).filter_by(username=username_or_token).first()
+        user = session.query(User).filter_by(username=username).first()
         if not user or not user.verify_password(password):
-            return False
+            return None
     g.user = user
     user.last_login_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
     session.add(user)
     session.commit()
-    return True
+    return user
+
+
+def identity(payload):
+    user_id = payload['identity']
+    return session.query(User).filter_by(id=user_id).first()
+
+
+jwt = JWT(app, authenticate, identity)
 
 
 class Register(Resource):
@@ -113,17 +119,17 @@ class Register(Resource):
         return jsonify({'status': True, 'msg': "注册成功"})
 
 
-class Login(Resource):
-    @staticmethod
-    @auth.login_required
-    def post():
-        token = g.user.generate_auth_token(600)
-        return jsonify({'status': True, 'msg': '登录成功', 'token': token.decode('ascii'), 'duration': 600})
+# class Login(Resource):
+#     @staticmethod
+#     @jwt_required()
+#     def post():
+#         token = g.user.generate_auth_token(600)
+#         return jsonify({'status': True, 'msg': '登录成功', 'token': token.decode('ascii'), 'duration': 600})
 
 
 class BindBabyId(Resource):
     @staticmethod
-    @auth.login_required
+    @jwt_required()
     def post():
         baby_uuid = request.json.get('baby_uuid')
         userbaby = session.query(UserBaby).filter_by(baby_uuid=baby_uuid).first()
@@ -139,7 +145,7 @@ class BindBabyId(Resource):
 
 class AddBindBabyId(Resource):
     @staticmethod
-    @auth.login_required
+    @jwt_required()
     def post():
         baby_uuid = request.json.get('baby_uuid')
         add_username = request.json.get('add_username')
@@ -161,15 +167,16 @@ class AddBindBabyId(Resource):
 
 class GetInfo(Resource):
     @staticmethod
-    @auth.login_required
+    @jwt_required()
     def post():
         return jsonify(
-            {'status': True, "msg": "获取成功", 'data': {'baby_id': g.user.baby_id, 'is_admin': g.user.is_admin}})
+            {'status': True, "msg": "获取成功",
+             'data': {'username': current_identity.username, 'register_time': current_identity.register_time}})
 
 
 class UploadLocation(Resource):
     @staticmethod
-    @auth.login_required
+    @jwt_required()
     def post():
         lac = request.json.get('lac')
         lng = request.json.get('lng')
@@ -193,7 +200,7 @@ class UploadLocation(Resource):
 
 class GetLocation(Resource):
     @staticmethod
-    @auth.login_required
+    @jwt_required()
     def post():
         baby_uuid = request.json('baby_uuid')
         baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
@@ -206,7 +213,7 @@ class GetLocation(Resource):
 
 
 api.add_resource(Register, '/api/v1/register')
-api.add_resource(Login, '/api/v1/login')
+# api.add_resource(Login, '/api/v1/login')
 api.add_resource(BindBabyId, '/api/v1/bind')
 api.add_resource(AddBindBabyId, '/api/v1/add_bind')
 api.add_resource(GetInfo, '/api/v1/get_info')
