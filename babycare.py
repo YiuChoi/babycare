@@ -197,8 +197,8 @@ class GetLocation(Resource):
     def post():
         baby_uuid = request.json('baby_uuid')
         baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
-        user = session.query(UserBaby).filter_by(username=g.user.username).first()
-        if user.baby_uuid is not baby.baby_uuid:
+        userbaby = session.query(UserBaby).filter_by(username=g.user.username).first()
+        if userbaby.baby_uuid is not baby.baby_uuid:
             return jsonify({'status': False, "msg": "绑定后才能读取位置哦"})
         return jsonify({'status': True, "msg": "获取成功",
                         'data': {'lac': baby.lac, 'lng': baby.lng, 'address': baby.address,
