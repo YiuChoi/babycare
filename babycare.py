@@ -1,11 +1,12 @@
 # coding: utf-8
 import time
+
 from flask import Flask, request, jsonify, g
+from flask_bcrypt import Bcrypt
 from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api
-from flask_bcrypt import Bcrypt
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer, SignatureExpired, BadSignature
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float
+from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -17,9 +18,17 @@ api = Api(app)
 bcrypt = Bcrypt(app)
 
 Base = declarative_base()
-engine = create_engine("mysql+pymysql://root:@localhost:3306/llc")
+engine = create_engine("mysql+pymysql://root:@localhost:3306/llc?charset=utf8")
 Session = sessionmaker(bind=engine)
 session = Session()
+
+
+def int2Boolean(i):
+    if i is 1:
+        return True
+    if i is 0:
+        return False
+    return False
 
 
 class Baby(Base):
@@ -27,8 +36,8 @@ class Baby(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     baby_uuid = Column(String(255), nullable=False, unique=True, primary_key=True)
-    lac = Column(Float)
-    lng = Column(Float)
+    lat = Column(String(255))
+    lng = Column(String(255))
     address = Column(String(255))
     last_time = Column(DateTime)
 
@@ -41,6 +50,9 @@ class UserBaby(Base):
     username = Column(String(255), nullable=False)
     baby_uuid = Column(String(255), nullable=False)
     relationship = Column(String(255), nullable=False)
+
+    def getInfo(self):
+        return {'is_admin': int2Boolean(self.is_admin), 'baby_uuid': self.baby_uuid, 'relationship': self.relationship}
 
 
 class User(Base):
@@ -59,7 +71,7 @@ class User(Base):
     def verify_password(self, password):
         return bcrypt.check_password_hash(self.password_hash, password)
 
-    def generate_auth_token(self, expiration=600):
+    def generate_auth_token(self, expiration=2592000):
         s = Serializer(app.config['SECRET_KEY'], expires_in=expiration)
         return s.dumps({'id': self.id})
 
@@ -85,7 +97,6 @@ def authenticate(username, password):
         user = session.query(User).filter_by(username=username).first()
         if not user or not user.verify_password(password):
             return None
-    g.user = user
     user.last_login_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
     session.add(user)
     session.commit()
@@ -119,12 +130,11 @@ class Register(Resource):
         return jsonify({'status': True, 'msg': "注册成功"})
 
 
-# class Login(Resource):
-#     @staticmethod
-#     @jwt_required()
-#     def post():
-#         token = g.user.generate_auth_token(600)
-#         return jsonify({'status': True, 'msg': '登录成功', 'token': token.decode('ascii'), 'duration': 600})
+class Login(Resource):
+    @staticmethod
+    @jwt_required()
+    def post():
+        return jsonify({'status': True})
 
 
 class BindBabyId(Resource):
@@ -132,12 +142,18 @@ class BindBabyId(Resource):
     @jwt_required()
     def post():
         baby_uuid = request.json.get('baby_uuid')
-        userbaby = session.query(UserBaby).filter_by(baby_uuid=baby_uuid).first()
-        if userbaby.is_admin:
+        user_relation = request.json.get('user_relation')
+        userbaby = session.query(UserBaby).filter_by(baby_uuid=baby_uuid, is_admin=1).first()
+        if userbaby is not None:
             return jsonify({'status': False, "msg": "此id已被绑定,请联系管理员添加"})
-        userbaby = g.user
+        userbaby = UserBaby()
         userbaby.baby_uuid = baby_uuid
+        userbaby.username = current_identity.username
+        userbaby.relationship = user_relation
         userbaby.is_admin = 1
+        baby = Baby()
+        baby.baby_uuid = baby_uuid
+        session.add(baby)
         session.add(userbaby)
         session.commit()
         return jsonify({'status': True, "msg": "绑定成功"})
@@ -165,31 +181,35 @@ class AddBindBabyId(Resource):
         return jsonify({'status': True, "msg": "添加成功"})
 
 
-class GetInfo(Resource):
+class GetBindInfo(Resource):
     @staticmethod
     @jwt_required()
     def post():
+        userbabys = session.query(UserBaby).filter_by(username=current_identity.username).all()
+        userbabys_json = []
+        for userbaby in userbabys:
+            userbabys_json.append(userbaby.getInfo())
         return jsonify(
             {'status': True, "msg": "获取成功",
-             'data': {'username': current_identity.username, 'register_time': current_identity.register_time}})
+             'data': userbabys_json})
 
 
 class UploadLocation(Resource):
     @staticmethod
     @jwt_required()
     def post():
-        lac = request.json.get('lat')
+        lat = request.json.get('lat')
         lng = request.json.get('lng')
         address = request.json.get('address')
         baby_uuid = request.json.get('baby_uuid')
         baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
-        user = session.query(UserBaby).filter_by(username=g.user.username).first()
-        if user.baby_uuid is not baby.baby_uuid:
+        user = session.query(UserBaby).filter_by(username=current_identity.username).first()
+        if user is None or baby is None or user.baby_uuid is not baby.baby_uuid:
             return jsonify({'status': False, "msg": "绑定后才能上传哦"})
         if not baby:
             baby = Baby()
         baby.address = address
-        baby.lac = lac
+        baby.lat = lat
         baby.lng = lng
         baby.baby_uuid = baby_uuid
         baby.last_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
@@ -204,19 +224,20 @@ class GetLocation(Resource):
     def post():
         baby_uuid = request.json('baby_uuid')
         baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
-        userbaby = session.query(UserBaby).filter_by(username=g.user.username).first()
+        userbaby = session.query(UserBaby).filter_by(username=current_identity.username).first()
         if userbaby.baby_uuid is not baby.baby_uuid:
             return jsonify({'status': False, "msg": "绑定后才能读取位置哦"})
-        return jsonify({'status': True, "msg": "获取成功",
-                        'data': {'lac': baby.lac, 'lng': baby.lng, 'address': baby.address,
-                                 'last_time': baby.last_time}})
+        if baby.lat is None:
+            return jsonify({'status': False, "msg": "目前还没有位置信息哟"})
+        return jsonify({'status': True, "msg": "获取成功", 'lat': baby.lat, 'lng': baby.lng, 'address': baby.address,
+                        'last_time': baby.last_time})
 
 
 api.add_resource(Register, '/api/v1/register')
-# api.add_resource(Login, '/api/v1/login')
+api.add_resource(Login, '/api/v1/login')
 api.add_resource(BindBabyId, '/api/v1/bind')
 api.add_resource(AddBindBabyId, '/api/v1/add_bind')
-api.add_resource(GetInfo, '/api/v1/get_info')
+api.add_resource(GetBindInfo, '/api/v1/get_bind_info')
 api.add_resource(UploadLocation, '/api/v1/upload_location')
 api.add_resource(GetLocation, '/api/v1/get_location')
 
