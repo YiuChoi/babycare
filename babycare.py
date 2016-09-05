@@ -222,7 +222,7 @@ class GetLocation(Resource):
     @staticmethod
     @jwt_required()
     def post():
-        baby_uuid = request.json('baby_uuid')
+        baby_uuid = request.json.get('baby_uuid')
         baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
         userbaby = session.query(UserBaby).filter_by(username=current_identity.username).first()
         if userbaby.baby_uuid is not baby.baby_uuid:
