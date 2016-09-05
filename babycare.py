@@ -178,7 +178,7 @@ class UploadLocation(Resource):
     @staticmethod
     @jwt_required()
     def post():
-        lac = request.json.get('lac')
+        lac = request.json.get('lat')
         lng = request.json.get('lng')
         address = request.json.get('address')
         baby_uuid = request.json('baby_uuid')
@@ -221,4 +221,4 @@ api.add_resource(UploadLocation, '/api/v1/upload_location')
 api.add_resource(GetLocation, '/api/v1/get_location')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0")
