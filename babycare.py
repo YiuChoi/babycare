@@ -181,7 +181,7 @@ class UploadLocation(Resource):
         lac = request.json.get('lat')
         lng = request.json.get('lng')
         address = request.json.get('address')
-        baby_uuid = request.json('baby_uuid')
+        baby_uuid = request.json.get('baby_uuid')
         baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
         user = session.query(UserBaby).filter_by(username=g.user.username).first()
         if user.baby_uuid is not baby.baby_uuid:
