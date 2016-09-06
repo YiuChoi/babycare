@@ -1,17 +1,20 @@
 # coding: utf-8
 import time
+from datetime import timedelta
 
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify
 from flask_bcrypt import Bcrypt
 from flask_jwt import JWT, jwt_required, current_identity
 from flask_restful import Resource, Api
-from itsdangerous import TimedJSONWebSignatureSerializer as Serializer, SignatureExpired, BadSignature
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'TwYV2R2IEU5&Ne6JSr@Jx9HjOuy7QVG%'
+app.config['AUTH_SALT'] = 'Jx9HjOuy7QVG'
+app.config['JWT_AUTH_URL_RULE'] = '/auth'
+app.config['JWT_EXPIRATION_DELTA'] = timedelta(milliseconds=1440*31*60)
 app.config['BCRYPT_LEVEL'] = 14
 api = Api(app)
 
@@ -71,32 +74,14 @@ class User(Base):
     def verify_password(self, password):
         return bcrypt.check_password_hash(self.password_hash, password)
 
-    def generate_auth_token(self, expiration=2592000):
-        s = Serializer(app.config['SECRET_KEY'], expires_in=expiration)
-        return s.dumps({'id': self.id})
-
-    @staticmethod
-    def verify_auth_token(token):
-        s = Serializer(app.config['SECRET_KEY'])
-        try:
-            data = s.loads(token)
-        except SignatureExpired:
-            return None  # valid token, but expired
-        except BadSignature:
-            return None  # invalid token
-        user = session.query(User).get(data['id'])
-        return user
-
 
 Base.metadata.create_all(engine)
 
 
 def authenticate(username, password):
-    user = User.verify_auth_token(username)
-    if not user:
-        user = session.query(User).filter_by(username=username).first()
-        if not user or not user.verify_password(password):
-            return None
+    user = session.query(User).filter_by(username=username).first()
+    if not user or not user.verify_password(password):
+        return None
     user.last_login_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
     session.add(user)
     session.commit()
