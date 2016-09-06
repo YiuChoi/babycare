@@ -14,7 +14,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'TwYV2R2IEU5&Ne6JSr@Jx9HjOuy7QVG%'
 app.config['AUTH_SALT'] = 'Jx9HjOuy7QVG'
 app.config['JWT_AUTH_URL_RULE'] = '/auth'
-app.config['JWT_EXPIRATION_DELTA'] = timedelta(milliseconds=1440*31*60)
+app.config['JWT_EXPIRATION_DELTA'] = timedelta(milliseconds=1440 * 31 * 60)
 app.config['BCRYPT_LEVEL'] = 14
 api = Api(app)
 
@@ -189,7 +189,7 @@ class UploadLocation(Resource):
         baby_uuid = request.json.get('baby_uuid')
         baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
         user = session.query(UserBaby).filter_by(username=current_identity.username).first()
-        if user is None or baby is None or user.baby_uuid is not baby.baby_uuid:
+        if user is None or baby is None or user.baby_uuid != baby.baby_uuid:
             return jsonify({'status': False, "msg": "绑定后才能上传哦"})
         if not baby:
             baby = Baby()
@@ -210,7 +210,7 @@ class GetLocation(Resource):
         baby_uuid = request.json.get('baby_uuid')
         baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
         userbaby = session.query(UserBaby).filter_by(username=current_identity.username).first()
-        if userbaby.baby_uuid is not baby.baby_uuid:
+        if userbaby.baby_uuid != baby.baby_uuid:
             return jsonify({'status': False, "msg": "绑定后才能读取位置哦"})
         if baby.lat is None:
             return jsonify({'status': False, "msg": "目前还没有位置信息哟"})
