@@ -39,10 +39,12 @@ class Baby(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     baby_uuid = Column(String(255), nullable=False, unique=True, primary_key=True)
+    nickname = Column(String(255))
     lat = Column(String(255))
     lng = Column(String(255))
     address = Column(String(255))
     last_time = Column(DateTime)
+    upload_user = Column(String(255))
 
 
 class UserBaby(Base):
@@ -54,8 +56,11 @@ class UserBaby(Base):
     baby_uuid = Column(String(255), nullable=False)
     relationship = Column(String(255), nullable=False)
 
-    def getInfo(self):
-        return {'is_admin': int2Boolean(self.is_admin), 'baby_uuid': self.baby_uuid, 'relationship': self.relationship}
+    def get_info(self):
+        baby = session.query(Baby).filter_by(baby_uuid=self.baby_uuid).first()
+        return {'is_admin': int2Boolean(self.is_admin), 'relationship': self.relationship,
+                'nickname': baby.nickname, 'baby_uuid': self.baby_uuid, 'lat': baby.lat, 'lng': baby.lng,
+                'address': baby.address, 'last_time': baby.last_time, 'upload_user': baby.upload_user}
 
 
 class User(Base):
@@ -126,6 +131,7 @@ class BindBabyId(Resource):
     @staticmethod
     @jwt_required()
     def post():
+        nickname = request.json.get("nickname")
         baby_uuid = request.json.get('baby_uuid')
         user_relation = request.json.get('user_relation')
         userbaby = session.query(UserBaby).filter_by(baby_uuid=baby_uuid, is_admin=1).first()
@@ -138,6 +144,7 @@ class BindBabyId(Resource):
         userbaby.is_admin = 1
         baby = Baby()
         baby.baby_uuid = baby_uuid
+        baby.nickname = nickname
         session.add(baby)
         session.add(userbaby)
         session.commit()
@@ -173,7 +180,7 @@ class GetBindInfo(Resource):
         userbabys = session.query(UserBaby).filter_by(username=current_identity.username).all()
         userbabys_json = []
         for userbaby in userbabys:
-            userbabys_json.append(userbaby.getInfo())
+            userbabys_json.append(userbaby.get_info())
         return jsonify(
             {'status': True, "msg": "获取成功",
              'data': userbabys_json})
@@ -188,8 +195,8 @@ class UploadLocation(Resource):
         address = request.json.get('address')
         baby_uuid = request.json.get('baby_uuid')
         baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
-        user = session.query(UserBaby).filter_by(username=current_identity.username).first()
-        if user is None or baby is None or user.baby_uuid != baby.baby_uuid:
+        user = session.query(UserBaby).filter_by(username=current_identity.username, baby_uuid=baby_uuid).first()
+        if user is None or baby is None:
             return jsonify({'status': False, "msg": "绑定后才能上传哦"})
         if not baby:
             baby = Baby()
@@ -197,6 +204,7 @@ class UploadLocation(Resource):
         baby.lat = lat
         baby.lng = lng
         baby.baby_uuid = baby_uuid
+        baby.upload_user = user.relationship
         baby.last_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
         session.add(baby)
         session.commit()
@@ -207,15 +215,14 @@ class GetLocation(Resource):
     @staticmethod
     @jwt_required()
     def post():
-        baby_uuid = request.json.get('baby_uuid')
-        baby = session.query(Baby).filter_by(baby_uuid=baby_uuid).first()
-        userbaby = session.query(UserBaby).filter_by(username=current_identity.username).first()
-        if userbaby.baby_uuid != baby.baby_uuid:
-            return jsonify({'status': False, "msg": "绑定后才能读取位置哦"})
-        if baby.lat is None:
+        userbabys = session.query(UserBaby).filter_by(username=current_identity.username).all()
+        baby_json = []
+        if userbabys is None:
             return jsonify({'status': False, "msg": "目前还没有位置信息哟"})
-        return jsonify({'status': True, "msg": "获取成功", 'lat': baby.lat, 'lng': baby.lng, 'address': baby.address,
-                        'last_time': baby.last_time})
+        for userbaby in userbabys:
+            baby = session.query(Baby).filter_by(baby_uuid=userbaby.baby_uuid).first()
+            baby_json.append(baby.get_info())
+        return jsonify({'status': True, "msg": "获取成功", 'data': baby_json})
 
 
 api.add_resource(Register, '/api/v1/register')
